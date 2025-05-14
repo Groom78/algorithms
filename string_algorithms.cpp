@@ -1,3 +1,8 @@
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <cmath>
+
 class StringAlgorithms{
 public:
     class SuffixArray{
@@ -108,9 +113,14 @@ public:
         /*
             @brief Computes the number of unique substrings (continuous subsequences) of a string
             
+            @param s  Input string.
+            
             @return Single integer, result
             
             Time and space complexity is O(N*log(N)), where N is the length of the string
+            
+            @fortesting
+            https://atcoder.jp/contests/practice2/tasks/practice2_i
         */
         
         int count_unique_substrings(std::string s){
