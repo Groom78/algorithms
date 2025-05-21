@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstdint>
+#include <type_traits>
 #include <stdexcept>
 
 /*
@@ -29,268 +30,150 @@
     - This implementation is tailored for use in competitive programming, number theory, or cryptographic contexts.
 */
 
-class mint{
+class mint {
 private:
     int64_t val;
-    static const int64_t MOD = 998244353;
+    static constexpr int64_t MOD = 998244353;
+
     static inline void undefined() {
         throw std::logic_error("Undefined behavior for mint class");
     }
+
     static inline mint fast_pow(mint x, int64_t y) {
-        if(y==0)return 1;
-        mint a = fast_pow(x, y/2);
-        if(y & 1)return a * a * x;
+        if (y == 0) return mint(1);
+        mint a = fast_pow(x, y / 2);
+        if (y & 1) return a * a * x;
         return a * a;
     }
+
+    void normalize() {
+        ((val %= MOD) += MOD) %= MOD;
+    }
+
 public:
     mint() : val(0ll) { }
     mint(int64_t val) : val(val) {
-        if(this->val >= MOD or this->val < 0){
-            ((this->val %= MOD) += MOD) %= MOD;
-        }
+        normalize();
     }
-    mint(const mint& other) : val(other.val) { }
-    ~mint () { }
-    mint& operator=(const mint& other) {
-        if (this == &other) return *this;
-        this->val = other.val;
-        return *this;
-    }
-    mint& operator=(const int64_t& other) {
-        this->val = other;
-        return *this;
-    }
-    bool operator>(const mint& other) const {
-        undefined();
-        return false;
-    }
-    bool operator>(const int64_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator>(const int32_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator>=(const mint& other) const {
-        undefined();
-        return false;
-    }
-    bool operator>=(const int64_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator>=(const int32_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<(const mint& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<(const int64_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<(const int32_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<=(const mint& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<=(const int64_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator<=(const int32_t& other) const {
-        undefined();
-        return false;
-    }
-    bool operator==(const mint& other) const {
-        return val == other.val;
-    }
-    bool operator==(const int64_t& other) const {
-        return *this == mint(other);
-    }
-    bool operator==(const int32_t& other) const {
-        return *this == mint(other);
-    }
-    bool operator!=(const mint& other) const {
-        return val != other.val;
-    }
-    bool operator!=(const int64_t& other) const {
-        return *this != mint(other);
-    }
-    bool operator!=(const int32_t& other) const {
-        return *this != mint(other);
-    }
+    mint(const mint& other) = default;
+    ~mint() = default;
+    mint& operator=(const mint& other) = default;
+    operator int64_t() const { return val; }
     mint& operator+=(const mint& other) {
-        this->val += other.val;
-        if(this->val >= MOD) this->val -= MOD;
+        val += other.val;
+        if (val >= MOD) val -= MOD;
         return *this;
     }
-    mint& operator+=(const int64_t& other){
-        *this += mint(other);
+    mint& operator-=(const mint& other) {
+        val -= other.val;
+        if (val < 0) val += MOD;
         return *this;
     }
-    mint& operator+=(const int32_t& other){
-        *this += mint(other);
+    mint& operator*=(const mint& other) {
+        val = (val * other.val) % MOD;
+        return *this;
+    }
+    mint& operator/=(const mint& other) {
+        *this *= fast_pow(other, MOD - 2);
         return *this;
     }
     friend mint operator+(mint lhs, const mint& rhs) {
         lhs += rhs;
         return lhs;
     }
-    friend mint operator+(mint lhs, int64_t rhs) {
-        lhs += rhs;
-        return lhs;
-    }
-    friend mint operator+(mint lhs, int32_t rhs) {
-        lhs += rhs;
-        return lhs;
-    }
-    mint& operator-=(const mint& other) {
-        this->val -= other.val;
-        if(this->val < 0) this->val += MOD;
-        return *this;
-    }
-    mint& operator-=(const int64_t& other){
-        *this -= mint(other);
-        return *this;
-    }
-    mint& operator-=(const int32_t& other){
-        *this -= mint(other);
-        return *this;
-    }
     friend mint operator-(mint lhs, const mint& rhs) {
         lhs -= rhs;
         return lhs;
-    }
-    friend mint operator-(mint lhs, int64_t rhs) {
-        lhs -= rhs;
-        return lhs;
-    }
-    friend mint operator-(mint lhs, int32_t rhs) {
-        lhs -= rhs;
-        return lhs;
-    }
-    operator int64_t() const{
-        return val;
-    }
-    operator int32_t() const{
-        return val;
-    }
-    friend mint operator<<(const mint& val, int64_t shift) {
-        if (shift < 0) return val >> (-shift);
-        if (shift == 0) return val;
-        return (val << (shift - 1ll)) * 2ll;
-    }
-    friend mint operator<<(const mint& val, int32_t shift) {
-        if (shift < 0) return val >> (-shift);
-        if (shift == 0) return val;
-        return (val << (shift - 1)) * 2;
-    }
-    friend mint operator>>(const mint& val, int64_t shift) {
-        if (shift < 0) return val << (-shift);
-        if (shift == 0) return val;
-        return (val >> (shift - 1ll)) / 2ll;
-    }
-    friend mint operator>>(const mint& val, int32_t shift) {
-        if (shift < 0) return val << (-shift);
-        if (shift == 0) return val;
-        return (val >> (shift - 1)) / 2;
-    }
-    mint& operator*=(const mint& other) {
-        int64_t result = this->val * other.val;
-        *this = result;
-        return *this;
-    }
-    mint& operator*=(const int64_t& other) {
-        int64_t result = this->val * other;
-        *this = result;
-        return *this;
-    }
-    mint& operator*=(const int32_t& other) {
-        int64_t result = this->val * int64_t(other);
-        *this = result;
-        return *this;
     }
     friend mint operator*(mint lhs, const mint& rhs) {
         lhs *= rhs;
         return lhs;
     }
-    friend mint operator*(mint lhs, const int64_t& rhs) {
+    friend mint operator/(mint lhs, const mint& rhs) {
+        lhs /= rhs;
+        return lhs;
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    mint& operator+=(T other) {
+        return *this += mint(static_cast<int64_t>(other));
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    mint& operator-=(T other) {
+        return *this -= mint(static_cast<int64_t>(other));
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    mint& operator*=(T other) {
+        return *this *= mint(static_cast<int64_t>(other));
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    mint& operator/=(T other) {
+        return *this /= mint(static_cast<int64_t>(other));
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator+(mint lhs, T rhs) {
+        lhs += rhs;
+        return lhs;
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator-(mint lhs, T rhs) {
+        lhs -= rhs;
+        return lhs;
+    }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator*(mint lhs, T rhs) {
         lhs *= rhs;
         return lhs;
     }
-    friend mint operator*(mint lhs, const int32_t& rhs) {
-        lhs *= rhs;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator/(mint lhs, T rhs) {
+        lhs /= rhs;
         return lhs;
     }
-    mint& operator/=(const mint& other) {
-        *this *= fast_pow(other, MOD-2ll);
-        return *this;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator+(T lhs, mint rhs) {
+        rhs += lhs;
+        return rhs;
     }
-    mint& operator/=(const int64_t& other) {
-        *this /= mint(other);
-        return *this;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator-(T lhs, mint rhs) {
+        return mint(lhs) - rhs;
     }
-    mint& operator/=(const int32_t& other) {
-        *this /= mint(other);
-        return *this;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator*(T lhs, mint rhs) {
+        rhs *= lhs;
+        return rhs;
     }
-    friend mint operator/(mint lhs, int64_t rhs) {
-        return lhs /= rhs;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend mint operator/(T lhs, mint rhs) {
+        return mint(lhs) / rhs;
     }
-    friend mint operator/(mint lhs, int32_t rhs) {
-        return lhs /= rhs;
+    friend mint operator<<(mint val, int64_t shift) {
+        if (shift < 0) return val >> (-shift);
+        return val * fast_pow(mint(2), shift);
     }
-    friend mint operator/(mint lhs, const mint& rhs){
-        return lhs /= rhs;
+    friend mint operator>>(mint val, int64_t shift) {
+        if (shift < 0) return val << (-shift);
+        static const mint inv2 = fast_pow(mint(2), MOD - 2);
+        return val * fast_pow(inv2, shift);
     }
-    mint& operator%=(const mint& other) {
-        undefined();
-        return *this;
+    bool operator==(const mint& other) const {
+        return val == other.val;
     }
-    mint& operator%=(const int64_t& other) {
-        undefined();
-        return *this;
+    bool operator!=(const mint& other) const {
+        return val != other.val;
     }
-    mint& operator%=(const int32_t& other) {
-        undefined();
-        return *this;
+    bool operator>(const mint&) const {
+        undefined(); return false;
     }
-    friend mint operator%(mint lhs, int64_t rhs) {
-        undefined();
-        return 0;
+    bool operator>=(const mint&) const {
+        undefined(); return false;
     }
-    friend mint operator%(mint lhs, int32_t rhs) {
-        undefined();
-        return 0;
+    bool operator<(const mint&) const {
+        undefined(); return false;
     }
-    friend mint operator%(mint lhs, const mint& rhs){
-        undefined();
-        return 0;
-    }
-    mint& operator++() {
-        *this += 1;
-        return *this;
-    }
-    mint operator++(int32_t) {
-        mint temp = *this;
-        ++(*this);
-        return temp;
-    }
-    mint& operator--() {
-        *this -= 1;
-        return *this;
-    }
-    mint operator--(int32_t) {
-        mint temp = *this;
-        --(*this);
-        return temp;
+    bool operator<=(const mint&) const {
+        undefined(); return false;
     }
     friend std::ostream& operator<<(std::ostream& os, const mint& m) {
         return os << m.val;
@@ -301,5 +184,10 @@ public:
         m = mint(x);
         return is;
     }
+    mint& operator++() { *this += 1; return *this; }
+    mint operator++(int32_t) { mint tmp = *this; ++(*this); return tmp; }
+    mint& operator--() { *this -= 1; return *this; }
+    mint operator--(int32_t) { mint tmp = *this; --(*this); return tmp; }
+    mint& operator%=(const mint&) { undefined(); return *this; }
+    friend mint operator%(mint, const mint&) { undefined(); return 0; }
 };
-

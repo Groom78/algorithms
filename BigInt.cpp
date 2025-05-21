@@ -6,806 +6,384 @@
 #include <stdexcept>
 #include <algorithm>
 #include <cstdint>
+#include <type_traits>
 
-class BigInt{
+class BigInt {
 private:
-    std :: vector<int64_t> num;
+    std::vector<int64_t> num;
     bool _sign;
-    const int64_t base = 1000000000000000000ll;
-    const int64_t KARATSUBA_THRESHOLD = 1024;
+    static constexpr int64_t base = 1000000000000000000ll;
+    static constexpr size_t KARATSUBA_THRESHOLD = 1024;
+
     void addAbsolute(const BigInt& other) {
-        int64_t carry = 0, sum;
-        int n = std::max(num.size(), other.num.size());
-        while(num.size() < n) num.push_back(0);
-        for (int i = 0; i < n; ++i) {
-            sum = num[i] + (i < other.num.size() ? other.num[i] : 0) + carry;
-            num[i] = sum % base;
-            carry = sum / base;
+        int64_t carry = 0;
+        size_t n = std::max(num.size(), other.num.size());
+        num.resize(n, 0);
+        for (size_t i = 0; i < n; ++i) {
+            __int128 sum = __int128(num[i]) + (i < other.num.size() ? other.num[i] : 0) + carry;
+            num[i] = int64_t(sum % base);
+            carry = int64_t(sum / base);
         }
         if (carry) num.push_back(carry);
     }
-    void subAbsolute(const BigInt& o) {
-        int64_t borrow = 0, diff;
+
+    void subAbsolute(const BigInt& other) {
+        int64_t borrow = 0;
         for (size_t i = 0; i < num.size(); ++i) {
-            diff = num[i] - (i < o.num.size() ? o.num[i] : 0) - borrow;
+            __int128 diff = __int128(num[i]) - (i < other.num.size() ? other.num[i] : 0) - borrow;
             if (diff < 0) {
                 diff += base;
                 borrow = 1;
             } else {
                 borrow = 0;
             }
-            num[i] = diff;
+            num[i] = int64_t(diff);
         }
     }
-    inline void normalize() {
-      while (num.size() > 1 && num.back() == 0)
-        num.pop_back();
-      if (num.size() == 1 && num[0] == 0)
-        _sign = true;
+
+    void normalize() {
+        while (num.size() > 1 && num.back() == 0) num.pop_back();
+        if (num.size() == 1 && num[0] == 0) _sign = true;
     }
+
     bool valid_string(const std::string& s) const {
-        if(s.length() == 0 or (s[0] != '-' and (s[0] > '9' or s[0] < '0'))) return false;
-        for(int i=1;i<s.length();i++){
-            if(s[i] > '9' or s[i] < '0') return false;
+        if (s.empty()) return false;
+        size_t start = (s[0] == '-') ? 1 : 0;
+        if (start == 1 && s.size() == 1) return false;
+        for (size_t i = start; i < s.size(); ++i) {
+            if (!std::isdigit(s[i])) return false;
         }
         return true;
     }
+
     std::string to_string() const {
         std::ostringstream oss;
-        if (!_sign) oss << "-";
-        for (int i = num.size() - 1; i >= 0; --i) {
-            if (i == num.size() - 1)
+        if (!_sign) oss << '-';
+        for (int32_t i = int32_t(num.size()) - 1; i >= 0; --i) {
+            if (i == int32_t(num.size()) - 1)
                 oss << num[i];
             else
                 oss << std::setw(18) << std::setfill('0') << num[i];
         }
         return oss.str();
     }
-    inline bool is_zero() const {
+
+    bool is_zero() const {
         return num.size() == 1 && num[0] == 0;
     }
-    inline BigInt classic_multiply(const BigInt& a, const BigInt& b) {
+
+    BigInt classic_multiply(const BigInt& a, const BigInt& b) const {
         BigInt result;
         result.num.assign(a.num.size() + b.num.size(), 0);
         for (size_t i = 0; i < a.num.size(); ++i) {
             __int128 carry = 0;
-            for (size_t j = 0; j < b.num.size() || carry != 0; ++j) {
-                __int128 cur = result.num[i + j] +
-                    (__int128)a.num[i] * (j < b.num.size() ? b.num[j] : 0) + carry;
-                result.num[i + j] = (int64_t)(cur % a.base);
-                carry = cur / a.base;
+            for (size_t j = 0; j < b.num.size() || carry; ++j) {
+                __int128 cur = result.num[i + j] + __int128(a.num[i]) * (j < b.num.size() ? b.num[j] : 0) + carry;
+                result.num[i + j] = int64_t(cur % base);
+                carry = cur / base;
             }
         }
         result._sign = (a._sign == b._sign);
         result.normalize();
         return result;
     }
-    inline BigInt higher_half(const BigInt& x, size_t m) {
+
+    BigInt higher_half(const BigInt& x, size_t m) const {
+        if (x.num.size() <= m) return BigInt(0);
         BigInt res;
-        if (x.num.size() <= m) {
-            res.num = {0};
-            res._sign = true;
-            return res;
-        }
         res.num.assign(x.num.begin() + m, x.num.end());
         res._sign = true;
         res.normalize();
         return res;
     }
-    inline BigInt lower_half(const BigInt& x, size_t m) {
+
+    BigInt lower_half(const BigInt& x, size_t m) const {
         BigInt res;
-        if (x.num.size() <= m) {
+        if (x.num.size() <= m)
             res.num = x.num;
-            res._sign = true;
-            return res;
-        }
-        res.num.assign(x.num.begin(), x.num.begin() + m);
+        else
+            res.num.assign(x.num.begin(), x.num.begin() + m);
         res._sign = true;
         res.normalize();
         return res;
     }
-    inline BigInt shift_left(const BigInt& x, size_t m) {
+
+    BigInt shift_left(const BigInt& x, size_t m) const {
         if (x.is_zero()) return BigInt(0);
         BigInt res = x;
         res.num.insert(res.num.begin(), m, 0);
         return res;
     }
-    BigInt karatsuba(const BigInt& x, const BigInt& y) {
-        int n = std::max(x.num.size(), y.num.size());
-        if (n <= KARATSUBA_THRESHOLD) { 
-            return classic_multiply(x, y);
-        }
-        int m = n / 2;
 
+    BigInt karatsuba(const BigInt& x, const BigInt& y) const {
+        size_t n = std::max(x.num.size(), y.num.size());
+        if (n <= KARATSUBA_THRESHOLD) return classic_multiply(x, y);
+        size_t m = n / 2;
         BigInt x1 = higher_half(x, m);
         BigInt x0 = lower_half(x, m);
         BigInt y1 = higher_half(y, m);
         BigInt y0 = lower_half(y, m);
-
         BigInt z0 = karatsuba(x0, y0);
         BigInt z2 = karatsuba(x1, y1);
         BigInt z1 = karatsuba(x0 + x1, y0 + y1) - z2 - z0;
-
-        BigInt result = shift_left(z2, 2 * m) + shift_left(z1, m) + z0;
-        result._sign = (x._sign == y._sign);
-        result.normalize();
-        return result;
+        BigInt res = shift_left(z2, 2 * m) + shift_left(z1, m) + z0;
+        res._sign = (x._sign == y._sign);
+        res.normalize();
+        return res;
     }
+
 public:
-    BigInt(){
-        _sign = true;
-        num = {0};
+    BigInt(): num{0}, _sign(true) {}
+    BigInt(int64_t x): num(), _sign(true) {
+        if (x < 0) { _sign = false; x = -x; }
+        while (x) { num.push_back(x % base); x /= base; }
+        if (num.empty()) num.push_back(0);
     }
-    BigInt(int64_t x){
-        if(x<0){
-            this->_sign = false;
-            x = -x;
+    BigInt(const std::string& s) {
+        if (!valid_string(s)) throw std::runtime_error("Invalid number string");
+        size_t pos = (s[0] == '-') ? 1 : 0;
+        _sign = (s[0] != '-');
+        for (int32_t i = int32_t(s.size()) - 1; i >= int32_t(pos); i -= 18) {
+            int32_t l = std::max(int32_t(pos), i - 17);
+            int64_t part = 0;
+            for (int32_t j = l; j <= i; ++j) part = part * 10 + (s[j] - '0');
+            num.push_back(part);
         }
-        else{
-            this->_sign = true;
-        }
-        if(x == 0){
-            num.push_back(0);
-            return;
-        }
-        while(x > 0){
-            num.push_back(x % base);
-            x /= base;
-        }
-    }
-    BigInt(const std::string& s){
-        if(!valid_string(s)){
-            throw std::runtime_error("Not a number!");
-        }
-        if(s.length() == 0){
-            _sign = true;
-            num = {0};
-            return;
-        }
-        int end;
-        if(s[0] == '-'){
-            _sign = false;
-            end = 1;
-        }
-        else{
-            _sign = true;
-            end = 0;
-        }
-        int rightidx = s.length()-1, leftidx;
-        while(rightidx>=end){
-            leftidx = std::max(end, rightidx - 17);
-            int64_t x = 0;
-            for(int j=leftidx;j<=rightidx;j++){
-                x *= 10;
-                x += s[j] - '0';
-            }
-            num.push_back(x);
-            rightidx = leftidx-1;
-        }
+        normalize();
     }
     template <size_t N>
-    BigInt(const char (&s)[N]) : BigInt(std::string(s)) {}
-    BigInt(const BigInt& other){
-        _sign = other._sign;
-        num = other.num;
-    }
-    ~BigInt () { }
-    BigInt& operator=(const int64_t& other){
-        (*this) = BigInt(int64_t(other));
-        return *this;
-    }
-    BigInt& operator=(const std::string& other){
-        (*this) = BigInt(other);
-        return *this;
-    }
+    BigInt(const char (&cstr)[N]): BigInt(std::string(cstr)) {}
+    BigInt(const BigInt& o) = default;
+    BigInt& operator=(const BigInt& o) = default;
+    BigInt& operator=(int64_t x) { return *this = BigInt(x); }
+    BigInt& operator=(const std::string& s) { return *this = BigInt(s); }
     template <size_t N>
-    BigInt& operator=(const char (&s)[N]) {
-        return *this = std::string(s);
-    }
-    BigInt& operator=(const BigInt& other) {
-        if (this == &other) return *this;
-        this->_sign = other._sign;
-        num = other.num;
-        return *this;
-    }
-    bool operator>(const BigInt& other) const{
-        if(other._sign and !_sign) return false;
-        if(!other._sign and _sign) return true;
-        if(!_sign) return other.abs() > this->abs();
-        if(num.size() > other.num.size()) return true;
-        if(num.size() < other.num.size()) return false;
-        for(int i=num.size()-1;i>=0;i--){
-            if(num[i] > other.num[i]) return true;
-            if(num[i] < other.num[i]) return false;
-        }
-        return false; //equal
-    }
-    bool operator>(const int64_t& other) const{
-        return (*this) > BigInt(other);
-    }
-    bool operator>(const std::string& other) const{
-        return (*this) > BigInt(other);
-    }
-    template <size_t N>
-    bool operator>(const char (&s)[N]) {
-        return *this > std::string(s);
-    }
-    bool operator>=(const BigInt& other) const{
-        if(other._sign and !_sign) return false;
-        if(!other._sign and _sign) return true;
-        if(!_sign) return other.abs() >= this->abs();
-        if(num.size() > other.num.size()) return true;
-        if(num.size() < other.num.size()) return false;
-        for(int i=num.size()-1;i>=0;i--){
-            if(num[i] > other.num[i]) return true;
-            if(num[i] < other.num[i]) return false;
-        }
-        return true; //equal
-    }
-    bool operator>=(const int64_t& other) const{
-        return (*this) >= BigInt(other);
-    }
-    bool operator>=(const std::string& other) const{
-        return (*this) >= BigInt(other);
-    }
-    template <size_t N>
-    bool operator>=(const char (&s)[N]) {
-        return *this >= std::string(s);
-    }
-    bool operator<(const BigInt& other) const{
-        if(other._sign and !_sign) return true;
-        if(!other._sign and _sign) return false;
-        if(!_sign) return other.abs() < this->abs();
-        if(num.size() > other.num.size()) return false;
-        if(num.size() < other.num.size()) return true;
-        for(int i=num.size()-1;i>=0;i--){
-            if(num[i] > other.num[i]) return false;
-            if(num[i] < other.num[i]) return true;
-        }
-        return false; //equal
-    }
-    bool operator<(const int64_t& other) const{
-        return (*this) < BigInt(other);
-    }
-    bool operator<(const std::string& other) const{
-        return (*this) < BigInt(other);
-    }
-    template <size_t N>
-    bool operator<(const char (&s)[N]) {
-        return *this < std::string(s);
-    }
-    bool operator<=(const BigInt& other) const{
-        if(other._sign and !_sign) return true;
-        if(!other._sign and _sign) return false;
-        if(!_sign) return other.abs() <= this->abs();
-        if(num.size() > other.num.size()) return false;
-        if(num.size() < other.num.size()) return true;
-        for(int i=num.size()-1;i>=0;i--){
-            if(num[i] > other.num[i]) return false;
-            if(num[i] < other.num[i]) return true;
-        }
-        return true; //equal
-    }
-    bool operator<=(const int64_t& other) const{
-        return (*this) <= BigInt(other);
-    }
-    bool operator<=(const std::string& other) const{
-        return (*this) <= BigInt(other);
-    }
-    template <size_t N>
-    bool operator<=(const char (&s)[N]) {
-        return *this <= std::string(s);
-    }
-    bool operator==(const BigInt& other) const{
-        if(other._sign and !_sign) return false;
-        if(!other._sign and _sign) return false;
-        if(!_sign) return other.abs() == this->abs();
-        if(num.size() > other.num.size()) return false;
-        if(num.size() < other.num.size()) return false;
-        for(int i=num.size()-1;i>=0;i--){
-            if(num[i] > other.num[i]) return false;
-            if(num[i] < other.num[i]) return false;
-        }
-        return true; //equal
-    }
-    bool operator==(const int64_t& other) const{
-        return (*this) == BigInt(other);
-    }
-    bool operator==(const std::string& other) const{
-        return (*this) == BigInt(other);
-    }
-    template <size_t N>
-    bool operator==(const char (&s)[N]) {
-        return *this == std::string(s);
-    }
-    bool operator!=(const BigInt& other) const{
-        return !((*this) == other);
-    }
-    bool operator!=(const int64_t& other) const{
-        return (*this) != BigInt(other);
-    }
-    bool operator!=(const std::string& other) const{
-        return (*this) != BigInt(other);
-    }
-    template <size_t N>
-    bool operator!=(const char (&s)[N]) {
-        return *this != std::string(s);
-    }
-    BigInt abs() const{
-        BigInt ret(*this);
-        ret.set_sign(true);
-        return ret;
-    }
-    BigInt inv_abs() const{
-        BigInt ret(*this);
-        ret.set_sign(false);
-        return ret;
-    }
-    BigInt& operator+=(const BigInt& other) {
-        if (this->_sign == other._sign) {
-            addAbsolute(other);
+    BigInt& operator=(const char (&cstr)[N]) { return *this = std::string(cstr); }
+
+    BigInt& operator+=(const BigInt& o) {
+        bool resultSign;
+        if (_sign == o._sign) {
+            addAbsolute(o);
+            resultSign = _sign;
         } else {
-            if (this->abs() >= other.abs()) {
-                subAbsolute(other);
+            if (abs() >= o.abs()) {
+                subAbsolute(o);
+                resultSign = _sign;
             } else {
-                BigInt tmp = other;
+                BigInt tmp = o;
                 tmp.subAbsolute(*this);
                 *this = std::move(tmp);
+                resultSign = o._sign;
             }
         }
+        _sign = resultSign;
         normalize();
         return *this;
     }
-    BigInt& operator+=(int64_t other) {
-        return *this += BigInt(other);
-    }
-    BigInt& operator+=(const std::string& other) {
-        return *this += BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator+=(const char (&s)[N]) {
-        return *this += std::string(s);
-    }
-    friend BigInt operator+(BigInt lhs, const BigInt& rhs) {
-        lhs += rhs;
-        return lhs;
-    }
-    friend BigInt operator+(BigInt lhs, int64_t rhs) {
-        lhs += rhs;
-        return lhs;
-    }
-    friend BigInt operator+(BigInt lhs, const std::string& rhs) {
-        lhs += rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator+(BigInt lhs, const char (&rhs)[N]) {
-        lhs += std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator-=(const BigInt& other) {
-        if (this->_sign != other._sign) {
-            addAbsolute(other);
+    BigInt& operator-=(const BigInt& o) {
+        bool resultSign;
+        if (_sign != o._sign) {
+            addAbsolute(o);
+            resultSign = _sign;
         } else {
-            if (this->abs() >= other.abs()) {
-                subAbsolute(other);
+            if (abs() >= o.abs()) {
+                subAbsolute(o);
+                resultSign = _sign;
             } else {
-                BigInt tmp = other;
+                BigInt tmp = o;
                 tmp.subAbsolute(*this);
-                tmp._sign = !tmp._sign;
                 *this = std::move(tmp);
+                resultSign = !_sign;
             }
         }
+        _sign = resultSign;
         normalize();
         return *this;
     }
-    BigInt& operator-=(int64_t other) {
-        return *this -= BigInt(other);
-    }
-    BigInt& operator-=(const std::string& other) {
-        return *this -= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator-=(const char (&s)[N]) {
-        return *this -= std::string(s);
-    }
-    friend BigInt operator-(BigInt lhs, const BigInt& rhs) {
-        lhs -= rhs;
-        return lhs;
-    }
-    friend BigInt operator-(BigInt lhs, int64_t rhs) {
-        lhs -= rhs;
-        return lhs;
-    }
-    friend BigInt operator-(BigInt lhs, const std::string& rhs) {
-        lhs -= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator-(BigInt lhs, const char (&rhs)[N]) {
-        lhs -= std::string(rhs);
-        return lhs;
-    }
-    friend BigInt operator<<(const BigInt& val, int64_t shift) {
-        if (shift < 0) return val >> (-shift);
-        if (val == BigInt(0ll)) return BigInt(0ll);
-
-        BigInt result = val;
-
-        while (shift--) {
-            int64_t carry = 0;
-            for (size_t i = 0; i < result.num.size(); ++i) {
-                __int128 temp = (__int128)result.num[i] * 2 + carry;
-                result.num[i] = temp % result.base;
-                carry = temp / result.base;
+    BigInt& operator*=(const BigInt& o) { *this = karatsuba(*this, o); normalize(); return *this; }
+    BigInt& operator/=(const BigInt& o) {
+        if (o.is_zero()) throw std::runtime_error("Division by zero");
+        bool signRes = (_sign == o._sign);
+        BigInt a = abs(), b = o.abs();
+        if (a < b) { *this = BigInt(0); _sign = true; return *this; }
+        BigInt q(0), r(0);
+        for (int32_t i = int32_t(a.num.size()) - 1; i >= 0; --i) {
+            r.num.insert(r.num.begin(), a.num[i]); r.normalize();
+            int64_t low = 0, high = base - 1;
+            while (low <= high) {
+                int64_t mid = (low + high) >> 1;
+                BigInt t = b * mid;
+                if (t <= r) low = mid + 1;
+                else high = mid - 1;
             }
-            if (carry > 0)
-                result.num.push_back(carry);
+            q.num.insert(q.num.begin(), high);
+            r -= b * high;
         }
+        q._sign = signRes; q.normalize(); *this = q;
+        return *this;
+    }
+    BigInt& operator%=(const BigInt& o) {
+        if (o.is_zero()) throw std::runtime_error("Modulo by zero");
+        BigInt d = *this / o; *this -= d * o; normalize(); return *this;
+    }
 
-        result.normalize();
-        return result;
-    }
-    friend BigInt operator>>(const BigInt& val, int64_t shift) {
-        if (shift < 0) return val << (-shift);
-        if (val == BigInt(0ll)) return BigInt(0ll);
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator+=(T x) { return *this += BigInt(int64_t(x)); }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator-=(T x) { return *this -= BigInt(int64_t(x)); }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator*=(T x) { return *this *= BigInt(int64_t(x)); }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator/=(T x) { return *this /= BigInt(int64_t(x)); }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator%=(T x) { return *this %= BigInt(int64_t(x)); }
 
-        BigInt result = val;
+    friend BigInt operator+(BigInt a, const BigInt& b) { return a += b; }
+    friend BigInt operator-(BigInt a, const BigInt& b) { return a -= b; }
+    friend BigInt operator*(BigInt a, const BigInt& b) { return a *= b; }
+    friend BigInt operator/(BigInt a, const BigInt& b) { return a /= b; }
+    friend BigInt operator%(BigInt a, const BigInt& b) { return a %= b; }
 
-        while (shift--) {
-            int64_t carry = 0;
-            for (int i = result.num.size() - 1; i >= 0; --i) {
-                __int128 current = (__int128)carry * result.base + result.num[i];
-                result.num[i] = current / 2;
-                carry = current % 2;
-            }
-        }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator+(BigInt a, T b) { return a += b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator-(BigInt a, T b) { return a -= b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator*(BigInt a, T b) { return a *= b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator/(BigInt a, T b) { return a /= b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator%(BigInt a, T b) { return a %= b; }
 
-        result.normalize();
-        return result;
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator+(T a, BigInt b) { return b += a; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator-(T a, BigInt b) { return BigInt(int64_t(a)) -= b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator*(T a, BigInt b) { return b *= a; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator/(T a, BigInt b) { return BigInt(int64_t(a)) /= b; }
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator%(T a, BigInt b) { return BigInt(int64_t(a)) %= b; }
+
+    BigInt& operator&=(const BigInt& o) {
+        size_t n = std::min(num.size(), o.num.size());
+        for (size_t i = 0; i < n; ++i) num[i] &= o.num[i];
+        for (size_t i = n; i < num.size(); ++i) num[i] = 0;
+        normalize(); return *this;
     }
-    BigInt& operator*=(const BigInt& other) {
-        *this = karatsuba(*this, other);
-        normalize();
-        return *this;
-    }
-    BigInt& operator*=(int64_t other) {
-        return *this *= BigInt(other);
-    }
-    BigInt& operator*=(const std::string& other) {
-        return *this *= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator*=(const char (&s)[N]) {
-        return *this *= std::string(s);
-    }
-    friend BigInt operator*(BigInt lhs, const BigInt& rhs) {
-        lhs *= rhs;
-        return lhs;
-    }
-    friend BigInt operator*(BigInt lhs, int64_t rhs) {
-        lhs *= rhs;
-        return lhs;
-    }
-    friend BigInt operator*(BigInt lhs, const std::string& rhs) {
-        lhs *= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator*(BigInt lhs, const char (&rhs)[N]) {
-        lhs *= std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator/=(const BigInt& other) {
-        if (other.is_zero()) {
-            throw std::runtime_error("Division by zero");
-        }
-        bool result_sign = (_sign == other._sign);
-        BigInt dividend = this->abs();
-        BigInt divisor = other.abs();
-        if (dividend < divisor) {
-            *this = BigInt(0);
-            _sign = true;
-            return *this;
-        }
-        BigInt quotient(0);
-        BigInt current(0);
-        for (int i = (int)dividend.num.size() - 1; i >= 0; --i) {
-            current.num.insert(current.num.begin(), dividend.num[i]);
-            current.normalize();
-            BigInt l(0), r(dividend.base), m, t;
-            while (l <= r) {
-                m = (l + r) >> 1;
-                t = divisor * m;
-                if (t <= current) {
-                    l = m + 1;
-                } else {
-                    r = m - 1;
-                }
-            }
-            quotient.num.insert(quotient.num.begin(), r.num.empty() ? 0 : r.num[0]);
-            current -= divisor * r;
-        }
-        quotient._sign = result_sign;
-        quotient.normalize();
-        *this = quotient;
-        return *this;
-    }
-    BigInt& operator/=(int64_t other) {
-        return *this /= BigInt(other);
-    }
-    BigInt& operator/=(const std::string& other) {
-        return *this /= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator/=(const char (&s)[N]) {
-        return *this /= std::string(s);
-    }
-    friend BigInt operator/(BigInt lhs, const BigInt& rhs) {
-        lhs /= rhs;
-        return lhs;
-    }
-    friend BigInt operator/(BigInt lhs, int64_t rhs) {
-        lhs /= rhs;
-        return lhs;
-    }
-    friend BigInt operator/(BigInt lhs, const std::string& rhs) {
-        lhs /= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator/(BigInt lhs, const char (&rhs)[N]) {
-        lhs /= std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator%=(const BigInt& other) {
-        if (other.is_zero()) {
-            throw std::runtime_error("Modulo by zero");
-        }
-        BigInt div = *this / other;
-        BigInt mult = div * other;
-        *this -= mult;
-        normalize();
-        return *this;
-    }
-    BigInt& operator%=(int64_t other) {
-        return *this %= BigInt(other);
-    }
-    BigInt& operator%=(const std::string& other) {
-        return *this %= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator%=(const char (&s)[N]) {
-        return *this %= std::string(s);
-    }
-    friend BigInt operator%(BigInt lhs, const BigInt& rhs) {
-        lhs %= rhs;
-        return lhs;
-    }
-    friend BigInt operator%(BigInt lhs, int64_t rhs) {
-        lhs %= rhs;
-        return lhs;
-    }
-    friend BigInt operator%(BigInt lhs, const std::string& rhs) {
-        lhs %= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator%(BigInt lhs, const char (&rhs)[N]) {
-        lhs %= std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator++() {
-        *this += 1;
-        return *this;
-    }
-    BigInt operator++(int32_t) {
-        BigInt temp = *this;
-        ++(*this);
-        return temp;
-    }
-    BigInt& operator--() {
-        *this -= 1;
-        return *this;
-    }
-    BigInt operator--(int32_t) {
-        BigInt temp = *this;
-        --(*this);
-        return temp;
-    }
-    bool operator!() const {
-        return this->is_zero();
-    }
-    bool operator&&(const BigInt& other) const {
-        return !this->is_zero() && !other.is_zero();
-    }
-    bool operator&&(int64_t other) const {
-        return !this->is_zero() && (other != 0);
-    }
-    bool operator&&(const std::string& other) const {
-        return !this->is_zero() && !(BigInt(other).is_zero());
-    }
-    template <size_t N>
-    bool operator&&(const char (&other)[N]) const {
-        return !this->is_zero() && !(BigInt(std::string(other)).is_zero());
-    }
-    bool operator||(const BigInt& other) const {
-        return !this->is_zero() || !other.is_zero();
-    }
-    bool operator||(int64_t other) const {
-        return !this->is_zero() || (other != 0);
-    }
-    bool operator||(const std::string& other) const {
-        return !this->is_zero() || !(BigInt(other).is_zero());
-    }
-    template <size_t N>
-    bool operator||(const char (&other)[N]) const {
-        return !this->is_zero() || !(BigInt(std::string(other)).is_zero());
-    }
-    BigInt& operator&=(const BigInt& other) {
-        size_t n = std::min(num.size(), other.num.size());
-        for (size_t i = 0; i < n; ++i) {
-            num[i] &= other.num[i];
-        }
-        for (size_t i = n; i < num.size(); ++i) {
-            num[i] = 0;
-        }
-        normalize();
-        return *this;
-    }
-    BigInt& operator&=(int64_t other) {
-        return *this &= BigInt(other);
-    }
-    BigInt& operator&=(const std::string& other) {
-        return *this &= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator&=(const char (&s)[N]) {
-        return *this &= std::string(s);
-    }
-    friend BigInt operator&(BigInt lhs, const BigInt& rhs) {
-        lhs &= rhs;
-        return lhs;
-    }
-    friend BigInt operator&(BigInt lhs, int64_t rhs) {
-        lhs &= rhs;
-        return lhs;
-    }
-    friend BigInt operator&(BigInt lhs, const std::string& rhs) {
-        lhs &= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator&(BigInt lhs, const char (&rhs)[N]) {
-        lhs &= std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator|=(const BigInt& other) {
-        size_t n = std::max(num.size(), other.num.size());
+    BigInt& operator|=(const BigInt& o) {
+        size_t n = std::max(num.size(), o.num.size());
         num.resize(n, 0);
-        for (size_t i = 0; i < other.num.size(); ++i) {
-            num[i] |= other.num[i];
-        }
-        normalize();
-        return *this;
+        for (size_t i = 0; i < o.num.size(); ++i) num[i] |= o.num[i];
+        normalize(); return *this;
     }
-    BigInt& operator|=(int64_t other) {
-        return *this |= BigInt(other);
-    }
-    BigInt& operator|=(const std::string& other) {
-        return *this |= BigInt(other);
-    }
-    template <size_t N>
-    BigInt& operator|=(const char (&s)[N]) {
-        return *this |= std::string(s);
-    }
-    friend BigInt operator|(BigInt lhs, const BigInt& rhs) {
-        lhs |= rhs;
-        return lhs;
-    }
-    friend BigInt operator|(BigInt lhs, int64_t rhs) {
-        lhs |= rhs;
-        return lhs;
-    }
-    friend BigInt operator|(BigInt lhs, const std::string& rhs) {
-        lhs |= rhs;
-        return lhs;
-    }
-    template <size_t N>
-    friend BigInt operator|(BigInt lhs, const char (&rhs)[N]) {
-        lhs |= std::string(rhs);
-        return lhs;
-    }
-    BigInt& operator^=(const BigInt& other) {
-        size_t n = std::max(num.size(), other.num.size());
+    BigInt& operator^=(const BigInt& o) {
+        size_t n = std::max(num.size(), o.num.size());
         num.resize(n, 0);
-        for (size_t i = 0; i < other.num.size(); ++i) {
-            num[i] ^= other.num[i];
+        for (size_t i = 0; i < o.num.size(); ++i) num[i] ^= o.num[i];
+        normalize(); return *this;
+    }
+    friend BigInt operator&(BigInt a, const BigInt& b) { return a &= b; }
+    friend BigInt operator|(BigInt a, const BigInt& b) { return a |= b; }
+    friend BigInt operator^(BigInt a, const BigInt& b) { return a ^= b; }
+
+    friend BigInt operator<<(BigInt v, int32_t s) {
+        if (s < 0) return v >> -s;
+        while (s--) v *= 2;
+        return v;
+    }
+    friend BigInt operator>>(BigInt v, int32_t s) {
+        if (s < 0) return v << -s;
+        while (s--) v /= 2;
+        return v;
+    }
+
+    bool operator<(const BigInt& o) const {
+        if (_sign != o._sign) return !_sign;
+        if (!_sign) return abs() > o.abs();
+        if (num.size() != o.num.size()) return num.size() < o.num.size();
+        for (int32_t i = int32_t(num.size()) - 1; i >= 0; --i) {
+            if (num[i] != o.num[i]) return num[i] < o.num[i];
         }
-        normalize();
-        return *this;
+        return false;
     }
-    BigInt& operator^=(int64_t other) {
-        return *this ^= BigInt(other);
-    }
-    BigInt& operator^=(const std::string& other) {
-        return *this ^= BigInt(other);
-    }
+    bool operator>(const BigInt& o) const { return o < *this; }
+    bool operator<=(const BigInt& o) const { return !(*this > o); }
+    bool operator>=(const BigInt& o) const { return !(*this < o); }
+    bool operator==(const BigInt& o) const { return _sign == o._sign && num == o.num; }
+    bool operator!=(const BigInt& o) const { return !(*this == o); }
+
+    friend std::ostream& operator<<(std::ostream& os, const BigInt& v) { return os << v.to_string(); }
+    friend std::istream& operator>>(std::istream& is, BigInt& v) { std::string s; is >> s; v = BigInt(s); return is; }
+
+    BigInt abs() const { BigInt r = *this; r._sign = true; return r; }
+    operator std::string() const { return to_string(); }
+    explicit operator int64_t() const { return std::stoll(to_string()); }
+
+    BigInt& operator+=(const std::string& s) { return *this += BigInt(s); }
+    BigInt& operator-=(const std::string& s) { return *this -= BigInt(s); }
+    BigInt& operator*=(const std::string& s) { return *this *= BigInt(s); }
+    BigInt& operator/=(const std::string& s) { return *this /= BigInt(s); }
+    BigInt& operator%=(const std::string& s) { return *this %= BigInt(s); }
+    friend BigInt operator+(BigInt a, const std::string& s) { return a += s; }
+    friend BigInt operator-(BigInt a, const std::string& s) { return a -= s; }
+    friend BigInt operator*(BigInt a, const std::string& s) { return a *= s; }
+    friend BigInt operator/(BigInt a, const std::string& s) { return a /= s; }
+    friend BigInt operator%(BigInt a, const std::string& s) { return a %= s; }
     template <size_t N>
-    BigInt& operator^=(const char (&s)[N]) {
-        return *this ^= std::string(s);
-    }
-    friend BigInt operator^(BigInt lhs, const BigInt& rhs) {
-        lhs ^= rhs;
-        return lhs;
-    }
-    friend BigInt operator^(BigInt lhs, int64_t rhs) {
-        lhs ^= rhs;
-        return lhs;
-    }
-    friend BigInt operator^(BigInt lhs, const std::string& rhs) {
-        lhs ^= rhs;
-        return lhs;
-    }
+    BigInt& operator+=(const char (&s)[N]) { return *this += std::string(s); }
     template <size_t N>
-    friend BigInt operator^(BigInt lhs, const char (&rhs)[N]) {
-        lhs ^= std::string(rhs);
-        return lhs;
-    }
+    BigInt& operator-=(const char (&s)[N]) { return *this -= std::string(s); }
+    template <size_t N>
+    BigInt& operator*=(const char (&s)[N]) { return *this *= std::string(s); }
+    template <size_t N>
+    BigInt& operator/=(const char (&s)[N]) { return *this /= std::string(s); }
+    template <size_t N>
+    BigInt& operator%=(const char (&s)[N]) { return *this %= std::string(s); }
+    template <size_t N>
+    friend BigInt operator+(BigInt a, const char (&s)[N]) { return a += s; }
+    template <size_t N>
+    friend BigInt operator-(BigInt a, const char (&s)[N]) { return a -= s; }
+    template <size_t N>
+    friend BigInt operator*(BigInt a, const char (&s)[N]) { return a *= s; }
+    template <size_t N>
+    friend BigInt operator/(BigInt a, const char (&s)[N]) { return a /= s; }
+    template <size_t N>
+    friend BigInt operator%(BigInt a, const char (&s)[N]) { return a %= s; }
+
     BigInt operator-() const {
-        BigInt result(*this);
-        if (!result.is_zero())
-            result._sign = !result._sign;
-        return result;
+        BigInt r = *this;
+        if (!r.is_zero()) r._sign = !r._sign;
+        return r;
     }
-    BigInt operator~() const {
-        BigInt result(*this);
-        for (size_t i = 0; i < result.num.size(); ++i) {
-            result.num[i] = ~result.num[i];
-        }
-        result.normalize();
-        return result;
+
+    BigInt& operator++() { return *this += 1; }
+    BigInt operator++(int32_t) { BigInt tmp = *this; ++*this; return tmp; }
+    BigInt& operator--() { return *this -= 1; }
+    BigInt operator--(int32_t) { BigInt tmp = *this; --*this; return tmp; }
+
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator&=(T x) { return *this &= BigInt(int64_t(x)); }
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator|=(T x) { return *this |= BigInt(int64_t(x)); }
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    BigInt& operator^=(T x) { return *this ^= BigInt(int64_t(x)); }
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator&(BigInt a, T b) { return a &= b; }
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator|(BigInt a, T b) { return a |= b; }
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    friend BigInt operator^(BigInt a, T b) { return a ^= b; }
+
+    friend BigInt operator<<(BigInt v, int64_t s) {
+        if (s < 0) return v >> -s;
+        while (s--) v *= 2;
+        return v;
     }
-    void set_sign(const bool& s){
-        _sign = s;
-    }
-    bool sign() const{
-        return _sign;
-    }
-    friend std::ostream& operator<<(std::ostream& os, const BigInt& val) {
-        if (!val._sign) os << "-";
-        for (int i = val.num.size() - 1; i >= 0; --i) {
-            if (i == val.num.size() - 1)
-                os << val.num[i];
-            else
-                os << std::setw(18) << std::setfill('0') << val.num[i];
-        }
-        return os;
-    }
-    friend std::istream& operator>>(std::istream& is, BigInt& val) {
-        std::string s;
-        is >> s;
-        val = BigInt(s);
-        return is;
-    }
-    operator std::string() const {
-        return this->to_string();
-    }
-    explicit operator int64_t() const {
-        std::string s = this->to_string();
-        try {
-            size_t pos = 0;
-            int64_t val = std::stoll(s, &pos);
-            if (pos != s.size())
-                throw std::overflow_error("Invalid BigInt format for int64_t conversion");
-            return val;
-        } catch (const std::out_of_range&) {
-            throw std::overflow_error("BigInt out of int64_t range");
-        } catch (const std::invalid_argument&) {
-            throw std::overflow_error("Invalid BigInt format");
-        }
-    }
-    int64_t size(){
-        return std::string(*this).length();
+    friend BigInt operator>>(BigInt v, int64_t s) {
+        if (s < 0) return v << -s;
+        while (s--) v /= 2;
+        return v;
     }
 };
