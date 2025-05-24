@@ -150,43 +150,100 @@ public:
 
 /*
     @class Hash
-    @brief Double-modulo rolling hash class for efficient string hashing.
+    @brief Efficient randomized double-modulo rolling hash class for string and substring comparison.
     
-    This class implements a rolling hash (polynomial hash) over strings,
-    using two independently randomized modulo bases (MOD1, MOD2) and two
-    randomized base values (base1, base2) to compute hash values.
-    It is designed to quickly compare or store strings (or substrings)
-    by their hash values, minimizing collision risk.
+    This class provides efficient hashing and comparison functionalities over strings.
+    Internally, it uses two randomized modulo systems (MOD1, MOD2) and two randomized bases (base1, base2)
+    to calculate robust 64-bit combined hashes, reducing the risk of collisions.
     
-    Key features:
-    - Uses a shuffled mapping of characters ('a'–'z') to random values,
-      making the character-to-value assignment less predictable.
-    - Supports both complete string hashing (via get_single) and substring
-      hashing (via get_pair or get_ll), leveraging precomputed prefix hashes.
-    - Two independent modulos are used to compute a pair of hash values,
-      which are then combined into a 64-bit value to greatly reduce collision chances.
-    - Dynamically resizes power tables (pow1, pow2) when longer strings are processed.
-    - push_back() stores and caches hash arrays for a collection of strings.
-      get_single() computes the hash of a standalone string.
+    Main use cases:
+    - Storing multiple strings and computing their hashes.
+    - Quickly comparing full strings or substrings using precomputed rolling hashes.
+    - Performing masked hash queries (replace one character with wildcard).
+    - Managing a stack of stored strings (push and pop).
     
-    Typical use cases:
-    - Fast substring comparison (e.g., pattern matching, suffix-prefix checks).
-    - String deduplication or lookup in hash-based structures.
-    - Rolling window hash checks in algorithms like Rabin-Karp.
+    ------------------------------------------
+    PUBLIC METHODS:
     
-    Note:
-    This hash implementation is for algorithmic use (not cryptographic security).
-    It relies on the randomized base and modulo selection to achieve very low
-    collision rates for practical input sizes.
+    ➤ size_t string_count() const
+      → Returns the current number of strings stored in the object.
+      → Example: if you pushed 3 strings, this returns 3.
+    
+    ➤ int64_t push_back(std::string s)
+      → Adds a string to the hash system.
+      → Computes and stores its prefix hashes.
+      → Returns the 64-bit combined hash (based on its full content).
+      → Example:
+          int64_t h = hash.push_back("apple");
+    
+    ➤ int64_t get_single(std::string s)
+      → Computes the 64-bit combined hash of the given string **without storing** it.
+      → Useful for comparing with previously stored strings.
+      → Example:
+          int64_t h1 = hash.get_single("banana");
+          int64_t h2 = hash.get_single("orange");
+    
+    ➤ int64_t pop_back()
+      → Removes the last pushed string.
+      → Returns its 64-bit combined hash.
+      → Throws std::out_of_range if no strings are stored.
+      → Example:
+          int64_t last = hash.pop_back();
+    
+    ➤ std::pair<int32_t, int32_t> get_pair(size_t idx, int32_t i, int32_t j) const
+      → Returns the pair of hashes (MOD1, MOD2) for the substring [i..j] of string at index idx.
+      → Zero-based indexing.
+      → Throws std::out_of_range on invalid index or range.
+      → Example:
+          auto pair = hash.get_pair(0, 2, 4);  // substring s[2..4] of first pushed string.
+    
+    ➤ int64_t get_ll(int idx, int i, int j) const
+      → Returns the 64-bit combined hash for the substring [i..j] of string at index idx.
+      → Equivalent to merging the MOD1 and MOD2 values into a single number.
+      → Example:
+         int64_t sub_hash = hash.get_ll(1, 0, 2);  // substring s[0..2] of second pushed string.
+    
+    ➤ int64_t get_masked(size_t idx, int j) const
+      → Returns the 64-bit combined hash when the character at position j is replaced by a wildcard.
+      → ⚠ Note: Requires alphabet_size to be increased by 1 (currently hardcoded to 26).
+      → Example:
+          int64_t masked = hash.get_masked(0, 2);  // first string, replacing s[2] with wildcard.
+    
+    ➤ int32_t compare_substring(int32_t idx1, int32_t i1, int32_t j1,
+                                int32_t idx2, int32_t i2, int32_t j2) const
+      → Lexicographically compares the substrings [i1..j1] and [i2..j2] 
+        from strings at idx1 and idx2 respectively.
+      → Returns:
+           -1 if first substring < second,
+            0 if they are equal,
+           +1 if first substring > second.
+      → Uses binary search over hashes for efficiency.
+      → Example:
+          int cmp = hash.compare_substring(0, 0, 2, 1, 0, 2);
+    
+    ➤ std::string get_string(int32_t idx) const
+      → Returns the original stored string at index idx.
+      → Throws std::out_of_range on invalid index.
+      → Example:
+          std::string s = hash.get_string(0);
+    
+    ------------------------------------------
+    ⚠ Important Notes:
+    - This hash system is **not cryptographically secure**. It is designed for fast lookups,
+      comparisons, and algorithmic use (e.g., pattern matching, deduplication).
+    - Internally, strings are indexed zero-based.
+    - The alphabet_size is currently set to 26 ('a'..'z').
+      To support wildcard hash functions properly, increase it to 27.
 */
 class Hash{
 private:
     // 0 indexed
     const int32_t alphabet_size = 26;
-    int32_t length, base1, base2, MOD1, MOD2, _string_count, max_string_length;
+    int32_t base1, base2, MOD1, MOD2, _string_count, max_string_length;
     std :: vector<int32_t> MODS = {998244353, 1000000007, 1000034507, 1000064501, 1009090909};
     std :: vector<std :: vector<int32_t> > hash1, hash2;
     std :: vector<int32_t> pow1, pow2, shuffled_chars;
+    std :: vector<std::string> data;
     std :: mt19937_64 rng;
     int32_t calc_hash(const std :: vector<int32_t>& hash, const std :: vector<int32_t>& po, const size_t& i, const size_t& j, const int32_t& MOD) const {
         if(i==0) return hash[j];
@@ -240,6 +297,7 @@ public:
         build_hash(_hash2, s, MOD2, base2);
         hash1.push_back(_hash1);
         hash2.push_back(_hash2);
+        data.push_back(s);
         ++_string_count;
         return int64_t(_hash1.back()) * (1ll<<31)  + _hash2.back();
     }
@@ -253,6 +311,61 @@ public:
         build_hash(_hash1, s, MOD1, base1);
         build_hash(_hash2, s, MOD2, base2);
         return int64_t(_hash1.back()) * (1ll<<31)  + _hash2.back();
+    }
+    int64_t pop_back(){
+        if(_string_count == 0){
+            throw std::out_of_range("pop_back : hash object is empty");
+        }
+        int64_t to_be_ret = int64_t(hash1.back().back()) * (1ll<<31)  + hash2.back().back();
+        hash1.pop_back();
+        hash2.pop_back();
+        data.pop_back();
+        --_string_count;
+        return to_be_ret;
+    }
+    int64_t get_masked(size_t idx, int j) const {
+        // !!! If you will use this function, please increase alphabet_size by 1.
+        int len = hash1[idx].size();
+        int32_t pre1 = j > 0 ? calc_hash(hash1[idx], pow1, 0, j-1, MOD1) : 0;
+        int32_t pre2 = j > 0 ? calc_hash(hash2[idx], pow2, 0, j-1, MOD2) : 0;
+        int32_t suf1 = j+1 < len ? calc_hash(hash1[idx], pow1, j+1, len-1, MOD1) : 0;
+        int32_t suf2 = j+1 < len ? calc_hash(hash2[idx], pow2, j+1, len-1, MOD2) : 0;
+        int32_t w1 = shuffled_chars[alphabet_size - 1];
+        int32_t w2 = w1;
+        int rem = len - j - 1;
+        int64_t m1 = ( int64_t(pre1) * pow1[rem+1]
+                     + int64_t(w1)   * pow1[rem]
+                     + int64_t(suf1) ) % MOD1;
+        int64_t m2 = ( int64_t(pre2) * pow2[rem+1]
+                     + int64_t(w2)   * pow2[rem]
+                     + int64_t(suf2) ) % MOD2;
+        return (m1 << 31) | m2;
+    }
+    int32_t compare_substring(int32_t idx1, int32_t i1, int32_t j1, int32_t idx2, int32_t i2, int32_t j2) const{
+        if (idx1 < 0 || idx1 >= _string_count || idx2 < 0 || idx2 >= _string_count)
+            throw std::out_of_range("compare_substring: invalid string index");
+        if (i1 < 0 || j1 < i1 || j1 >= data[idx1].size() || i2 < 0 || j2 < i2 || j2 >= data[idx2].size())
+            throw std::out_of_range("compare_substring: invalid substring range");
+        int32_t right = std :: min(j1-i1+1, j2-i2+1), left = 1, lcp = 0, mid;
+        while(left <= right){
+            mid = (left + right) / 2;
+            if(get_pair(idx1, i1, i1+mid-1) == get_pair(idx2, i2, i2+mid-1)){
+                lcp = std :: max(lcp, mid);
+                left = mid + 1;
+            }
+            else{
+                right = mid - 1;
+            }
+        }
+        if(i1 + lcp - 1 == j1 and i2 + lcp - 1 == j2) return 0;
+        if(i1 + lcp - 1 == j1) return -1;
+        if(i2 + lcp - 1 == j2) return 1;
+        if(data[idx1][i1+lcp] < data[idx2][i2+lcp]) return -1;
+        return 1;
+    }
+    std :: string get_string(int32_t idx) const{
+        if(idx < 0 or idx >= _string_count) throw std::out_of_range("get_string : invalid argument");
+        return data[idx];
     }
     Hash() : rng(std::chrono::steady_clock::now().time_since_epoch().count()){
         shuffle_chars();
